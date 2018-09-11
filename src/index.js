@@ -5,7 +5,7 @@ const NodeRSA = require("node-rsa");
 const snekfetch = require("snekfetch");
 
 const app = express();
-const port = process.env.PORT || 8080;
+const port = process.env.PORT || 3333;
 
 app.listen(port, () => {
   console.log("Website is running on http://localhost:" + port);
