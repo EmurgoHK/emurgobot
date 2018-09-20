@@ -1,25 +1,37 @@
+const Search = require(`${__dirname}/../../structures/ReferenceSearch.js`);
+
 exports.run = async function(pull, repo, opened) {
   const author = pull.user.login;
   const number = pull.number;
   const repoName = repo.name;
   const repoOwner = repo.owner.login;
 
-  const refIssues = await this.getReferences(number, repoOwner, repoName);
+  const references = new Search(this, pull, repo);
+  const bodyRefs = await references.getBody();
+  const commitRefs = await references.getCommits();
 
-  if (!refIssues.length && this.findKeywords(pull.body)) {
-    const comment = this.templates.get("fixCommitMessage")
-      .replace(new RegExp("{author}", "g"), author);
+  const missingRefs = bodyRefs.filter(r => !commitRefs.includes(r));
+
+  const template = this.templates.get("fixCommitWarning");
+  const comments = await template.getComments({
+    number: number, owner: repoOwner, repo: repoName
+  });
+
+  if (!comments.length && missingRefs.length) {
+    const comment = template.format({
+      author: author, issues: missingRefs.join(", #"),
+      fixIssues: missingRefs.join(", fixes #"),
+      issuePronoun: missingRefs.length ? "them" : "it"
+    });
     return this.issues.createComment({
       owner: repoOwner, repo: repoName, number: number, body: comment
     });
   }
 
-  if (!opened) return;
+  if (!opened || !this.cfg.pulls.references.labels) return;
 
-  Array.from(new Set(refIssues)).forEach(issue => {
-    if (this.cfg.pulls.references.labels) {
-      labelReference.apply(this, [issue, number, repo]);
-    }
+  commitRefs.forEach(issue => {
+    labelReference.apply(this, [issue, number, repo]);
   });
 };
 

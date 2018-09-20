@@ -3,7 +3,7 @@ exports.run = async function(payload, commenter, args) {
   const self = this.cfg.issues.commands.label.self;
   const selfLabel = self.users ? !self.users.includes(commenter) : self;
   const forbidden = selfLabel && creator !== commenter;
-  if (forbidden || !args.match(/".*?"/)) return;
+  if (forbidden || !args.match(/".*?"/)) return this.util.respond(false);
 
   const repoName = payload.repository.name;
   const repoOwner = payload.repository.owner.login;
@@ -18,22 +18,21 @@ exports.run = async function(payload, commenter, args) {
     owner: repoOwner, repo: repoName, number: number, labels: removeLabels
   });
 
-  if (!rejected.length) return;
+  if (!rejected.length) return this.util.respond(true);
 
   const one = rejected.length === 1;
   const type = payload.issue.pull_request ? "pull request" : "issue";
-  const error = this.templates.get("labelError")
-    .replace(new RegExp("{labels}", "g"), `Label${one ? "" : "s"}`)
-    .replace(new RegExp("{labelList}", "g"), `"${rejected.join("\", \"")}"`)
-    .replace(new RegExp("{existState}", "g"), `do${one ? "es" : ""} not exist`)
-    .replace(new RegExp("{type}", "g"), type)
-    .replace(new RegExp("{beState}", "g"), `w${one ? "as" : "ere"}`)
-    .replace(new RegExp("{action}", "g"), "removed from");
 
-  this.issues.createComment({
+  const error = this.templates.get("labelError").format({
+    labels: `Label${one ? "" : "s"}`, type: type,
+    labelList: `"${rejected.join("\", \"")}"`,
+    exist: `do${one ? "es" : ""} not exist`,
+    beState: `w${one ? "as" : "ere"}`, action: "removed from"
+  });
+
+  return this.issues.createComment({
     owner: repoOwner, repo: repoName, number: number, body: error
   });
 };
 
-const cfg = require("../../config/default.js");
-exports.aliases = cfg.issues.commands.label.remove;
+exports.aliasPath = "label.remove";

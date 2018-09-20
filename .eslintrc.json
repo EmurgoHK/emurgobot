@@ -11,9 +11,16 @@
     "curly": ["error", "multi-line", "consistent"],
     "indent": ["error", 2],
     "max-nested-callbacks": ["error", 3],
-    "max-len": ["error", 80],
+    "max-len": ["warn", 80],
     "max-params": ["error", 5],
     "no-await-in-loop": "off",
+    "no-useless-constructor": "error",
+    "no-var": "error",
+    "object-shorthand": ["error", "consistent-as-needed"],
+    "prefer-arrow-callback": "error",
+    "prefer-destructuring": ["error", {"array": true, "object": false}],
+    "prefer-const": "error",
+    "prefer-template": "error",
     "quotes": ["error", "double"],
     "space-before-function-paren": ["error", "never"]
   }

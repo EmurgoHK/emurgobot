@@ -44,7 +44,7 @@ exports.progress = function(payload) {
   const assignees = payload.issue.assignees;
   let assigned = assignees.length;
   // GitHub API bug sometimes doesn't remove unassigned user from array
-  if (assigned === 1) assigned = (payload.issue.assignee || {}).id !== assignees[0].id;
+  if (assigned === 1) assigned = payload.assignee.id !== assignees[0].id;
 
   if (action === "assigned" && !labeled) {
     this.issues.addLabels({

@@ -1,4 +1,5 @@
-const _ = require("../../node_modules/lodash");
+const _ = require("lodash");
+const Search = require(`${__dirname}/../../structures/ReferenceSearch.js`);
 
 exports.label = async function(payload) {
   const repoName = payload.repository.name;
@@ -59,13 +60,13 @@ function review(labels, action, author, reviewer) {
 async function size(sizeLabels, labels, number, repo) {
   const repoName = repo.name;
   const repoOwner = repo.owner.login;
-  let pullLabels = labels.filter(label => !sizeLabels.has(label));
+  const pullLabels = labels.filter(label => !sizeLabels.has(label));
 
-  const files = await this.pullRequests.getFiles({
-    owner: repoOwner, repo: repoName, number: number, per_page: 100
+  const files = await this.util.getAllPages("pullRequests.getFiles", {
+    owner: repoOwner, repo: repoName, number: number
   });
 
-  const changes = files.data.filter(file => {
+  const changes = files.filter(file => {
     return !this.cfg.pulls.status.size.exclude.includes(file.filename);
   }).reduce((sum, file) => sum + file.changes, 0);
 
@@ -93,4 +94,53 @@ exports.assign = function(payload) {
   this.issues.addAssigneesToIssue({
     owner: repoOwner, repo: repoName, number: number, assignees: [reviewer]
   });
+};
+
+exports.update = async function(pull, repo) {
+  const number = pull.number;
+  const repoName = repo.name;
+  const repoOwner = repo.owner.login;
+
+  const warnings = new Map([
+    ["mergeConflictWarning", pull => {
+      return new Promise(resolve => resolve(pull.mergeable));
+    }],
+    ["fixCommitWarning", async(pull, repo) => {
+      const references = new Search(this, pull, repo);
+      const bodyRefs = await references.getBody();
+      const commitRefs = await references.getCommits();
+      return bodyRefs.every(r => commitRefs.includes(r));
+    }]
+  ]);
+
+  for (const [name, check] of warnings) {
+    const template = this.templates.get(name);
+    const deletable = await check(pull, repo);
+    if (!deletable) continue;
+
+    const {label} = this.cfg.pulls.status.mergeConflicts;
+
+    if (label) {
+      try {
+        await this.issues.removeLabel({
+          owner: repoOwner, repo: repoName, number: number, name: label
+        });
+      } catch (e) {
+        // although we could attempt to fetch labels of the pull request,
+        // it's an extra API call, so we silently ignore the error instead.
+      }
+    }
+
+    const comments = await template.getComments({
+      number: number, owner: repoOwner, repo: repoName
+    });
+
+    if (!comments.length) continue;
+
+    comments.forEach(comment => {
+      this.issues.deleteComment({
+        owner: repoOwner, repo: repoName, comment_id: comment.id
+      });
+    });
+  }
 };

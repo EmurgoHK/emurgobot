@@ -1,14 +1,13 @@
 const client = require("./client.js");
 const crypto = require("crypto");
 const express = require("express");
-const NodeRSA = require("node-rsa");
-const snekfetch = require("snekfetch");
+const fetch = require("node-fetch");
 
 const app = express();
 const port = process.env.PORT || 3333;
 
 app.listen(port, () => {
-  console.log("Website is running on http://localhost:" + port);
+  console.log(`Website is running on http://localhost:${port}`);
 });
 
 app.get("/", (req, res) => {
@@ -19,44 +18,91 @@ const jsonParser = express.json({limit: "50mb"});
 const urlencodedParser = express.urlencoded({extended: true});
 
 app.post("/github", jsonParser, async(req, res) => {
-  if (req.get("X-GitHub-Event")) {
-    const signature = req.get("X-Hub-Signature");
-    const secret = client.cfg.auth.webhookSecret.toString();
-    const body = JSON.stringify(req.body);
-    const hmac = crypto.createHmac("sha1", secret).update(body).digest("hex");
+  const secret = client.cfg.auth.webhookSecret.toString();
+  const body = JSON.stringify(req.body);
+  const hmac = crypto.createHmac("sha1", secret).update(body).digest("hex");
+  const hash = Buffer.from(`sha1=${hmac}`);
+  const signature = Buffer.from(req.get("X-Hub-Signature"));
 
-    if (signature === `sha1=${hmac}`) {
-      const validEvent = client.events.get(req.get("X-GitHub-Event"));
-      if (validEvent) validEvent(req.body);
-      return res.status(200).send("Valid request");
-    }
+  // compare buffer length first to prevent timingSafeEqual() errors
+  const equalLength = hash.length === signature.length;
+  const equal = equalLength ? crypto.timingSafeEqual(hash, signature) : false;
+  if (!equal) {
+    return res.status(401).send("Signature doesn't match computed hash");
   }
-  res.status(500).send("Invalid request");
+
+  const eventType = req.get("X-GitHub-Event");
+  if (!eventType) {
+    return res.status(400).send("X-GitHub-Event header was null");
+  }
+
+  const payload = req.body;
+  const repo = payload.repository ? payload.repository.full_name : null;
+  const check = client.cfg.activity.check.repositories.includes(repo);
+  const eventHandler = client.events.get(eventType);
+  if (!check || !eventHandler) return res.status(204).end();
+
+  eventHandler(payload);
+  res.status(202).send("Request is being processed");
 });
 
 app.post("/travis", urlencodedParser, async(req, res) => {
-  if (req.get("Travis-Repo-Slug")) {
-    const r = await snekfetch.get("https://api.travis-ci.org/config");
-    const pubKey = JSON.parse(r.text).config.notifications.webhook.public_key;
-    const key = new NodeRSA(pubKey, {signingScheme: "sha1"});
-    const signature = req.get("Signature");
-    const payload = JSON.parse(req.body.payload);
-    const valid = key.verify(payload, signature, "base64", "base64");
+  const response = await fetch("https://api.travis-ci.org/config");
+  const json = await response.json();
+  const publicKey = json.config.notifications.webhook.public_key;
+  const verifier = crypto.createVerify("sha1");
+  const signature = Buffer.from(req.headers.signature, "base64");
+  verifier.update(req.body.payload);
+  const valid = verifier.verify(publicKey, signature);
 
-    if (valid) {
-      client.events.get("travis")(payload);
-      return res.status(200).send("Valid request");
-    }
+  if (!valid) {
+    return res.status(401).send("Signature doesn't match computed hash");
   }
-  res.status(500).send("Invalid request");
+
+  const repo = req.get("Travis-Repo-Slug");
+  if (!repo) {
+    return res.status(400).send("Travis-Repo-Slug header was null");
+  }
+
+  const check = client.cfg.activity.check.repositories.includes(repo);
+  if (!check) return res.status(204).end();
+
+  const payload = JSON.parse(req.body.payload);
+  client.events.get("travis")(payload);
+  res.status(202).send("Request is being processed");
 });
 
-process.on("unhandledRejection", (error, promise) => {
-  console.error("An unhandled promise rejection was detected at:", promise);
+process.on("unhandledRejection", error => {
+  console.log(`Unhandled promise rejection:\n${error.stack}`);
 });
 
 if (client.cfg.activity.check.interval) {
   setInterval(() => {
-    client.automations.get("activity").run();
+    client.events.get("activity")();
   }, client.cfg.activity.check.interval * 3600000);
 }
+
+Object.entries(client.cfg.auth).forEach(pair => {
+  const [key, value] = pair;
+
+  if (typeof value === "string") {
+    return console.log(`Using environment variable value for \`${key}\`...`);
+  }
+
+  try {
+    const secretsPath = `${__dirname}/../config/secrets.json`;
+    console.log(`Using value from \`${secretsPath}\` for \`${key}\`...`);
+    const secrets = require(secretsPath);
+    if (typeof secrets[key] !== "string") throw new Error();
+    client.cfg.auth[key] = secrets[key];
+  } catch (e) {
+    console.log(`\`${key}\` value was not set. Please fix your configuration.`);
+    process.exit(1);
+  }
+});
+
+client.authenticate({
+  type: "basic",
+  username: client.cfg.auth.username,
+  password: client.cfg.auth.password
+});

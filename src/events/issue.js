@@ -4,16 +4,16 @@ exports.run = function(payload) {
   const repo = payload.repository;
   const label = payload.label;
 
-  if (this.cfg.activity.issues.inProgress) {
-    this.automations.get("issueState").progress(payload);
+  if (payload.assignee && this.cfg.activity.issues.inProgress) {
+    this.responses.get("issueState").progress(payload);
   }
 
   if (["labeled", "unlabeled"].includes(action)) {
-    this.automations.get("areaLabel").run(issue, repo, label);
+    this.responses.get("areaLabel").run(issue, repo, label);
   } else if (action === "closed" && this.cfg.activity.issues.clearClosed) {
-    this.automations.get("issueState").close(issue, repo);
+    this.responses.get("issueState").close(issue, repo);
   } else if (action === "reopened") {
-    this.automations.get("issueState").reopen(issue);
+    this.responses.get("issueState").reopen(issue);
   } else if (action === "opened" || action === "created") {
     parse.call(this, payload);
   }
@@ -34,7 +34,7 @@ function parse(payload) {
   parsed.forEach(command => {
     const codeBlocks = [`\`\`\`\r\n${command}\r\n\`\`\``, `\`${command}\``];
     if (codeBlocks.some(block => body.includes(block))) return;
-    const keyword = command.replace(/\s+/, " ").split(" ")[1];
+    const [, keyword] = command.replace(/\s+/, " ").split(" ");
     const args = command.replace(/\s+/, " ").split(" ").slice(2).join(" ");
     const file = this.commands.get(keyword);
 

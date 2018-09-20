@@ -12,20 +12,15 @@ exports.run = function(payload, commenter) {
     });
   }
 
-  const assignee = JSON.stringify({
-    assignees: commenter
-  });
-
-  this.issues.removeAssigneesFromIssue({
-    owner: repoOwner, repo: repoName, number: number, body: assignee
-  });
-
   if (isDone) {
     this.issues.addLabels({
       owner: repoOwner, repo: repoName, number: number, labels: ['done']
     });
   }
+
+  return this.issues.removeAssigneesFromIssue({
+    owner: repoOwner, repo: repoName, number: number, assignees: [commenter]
+  });
 };
 
-const cfg = require("../../config/default.js");
-exports.aliases = cfg.issues.commands.assign.abandon;
+exports.aliasPath = "assign.abandon";
