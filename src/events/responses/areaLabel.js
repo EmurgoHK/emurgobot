@@ -1,4 +1,4 @@
-let referenced = [];
+const referenced = [];
 
 exports.run = async function(issue, repo, label) {
   const areaLabel = label.name;
@@ -14,40 +14,35 @@ exports.run = async function(issue, repo, label) {
   const labelTeams = issueAreaLabels.map(l => areaLabels.get(l));
 
   // Create unique array of teams (labels can point to same team)
-  const uniqueTeams = Array.from(new Set(labelTeams));
+  const uniqueTeams = this.util.deduplicate(labelTeams);
 
-  const areaTeams = `@${repoOwner}/` + uniqueTeams.join(`, @${repoOwner}/`);
+  const areaTeams = `@${repoOwner}/${uniqueTeams.join(`, @${repoOwner}/`)}`;
   const references = issueAreaLabels.join("\", \"");
 
   const payload = issue.pull_request ? "pull request" : "issue";
   const labelSize = labelTeams.length === 1 ? "label" : "labels";
+  const template = this.templates.get("areaLabelAddition");
 
-  const comment = this.templates.get("areaLabelNotification")
-    .replace(new RegExp("{teams}", "g"), areaTeams)
-    .replace(new RegExp("{payload}", "g"), payload)
-    .replace(new RegExp("{refs}", "g"), `"${references}"`)
-    .replace(new RegExp("{labels}", "g"), labelSize);
-
-  const issueComments = await this.issues.getComments({
-    owner: repoOwner, repo: repoName, number: number, per_page: 100
+  const comment = template.format({
+    teams: areaTeams, refs: `"${references}"`, labels: labelSize,
+    payload: payload
   });
-  const labelComment = issueComments.data.find(com => {
-    // Use end of line comments to check if comment is from template
-    const comment = com.body.endsWith("<!-- areaLabelNotification -->");
-    const fromClient = com.user.login === this.cfg.auth.username;
-    return comment && fromClient;
+
+  const comments = await template.getComments({
+    owner: repoOwner, repo: repoName, number: number
   });
 
   const tag = `${repoOwner}/${repoName}#${number}`;
 
-  if (labelComment) {
+  if (comments.length) {
+    const id = comments[0].id;
     if (issueAreaLabels.length) {
       this.issues.editComment({
-        owner: repoOwner, repo: repoName, id: labelComment.id, body: comment
+        owner: repoOwner, repo: repoName, comment_id: id, body: comment
       });
     } else {
       this.issues.deleteComment({
-        owner: repoOwner, repo: repoName, id: labelComment.id
+        owner: repoOwner, repo: repoName, comment_id: id
       });
     }
   } else if (!referenced.includes(tag) && issueAreaLabels.length) {
