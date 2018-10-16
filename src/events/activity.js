@@ -151,6 +151,10 @@ async function scrapeInactiveIssues(references, issues) {
       this.issues.editComment({
         owner: repoOwner, repo: repoName, comment_id: id, body: warning
       });
+
+      this.issues.addLabels({
+        owner: repoOwner, repo: repoName, number: number, labels: ['unclaimed']
+      });
     } else if (time + ims <= Date.now()) {
       this.issues.createComment({
         owner: repoOwner, repo: repoName, number: number, body: comment
