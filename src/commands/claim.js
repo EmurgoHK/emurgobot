@@ -28,9 +28,9 @@ exports.run = async function(payload, commenter, args) {
     });
 
     if (contributors.find(c => c.login === commenter)) {
-      claim.apply(this, [commenter, number, repoOwner, repoName]);
+      claim.apply(this, [payload, commenter, number, repoOwner, repoName]);
     } else {
-      validate.apply(this, [commenter, number, repoOwner, repoName]);
+      validate.apply(this, [payload, commenter, number, repoOwner, repoName]);
     }
   } catch (response) {
     if (response.code !== 404) {
@@ -109,7 +109,7 @@ async function invite(payload, commenter, args) {
   this.invites.set(inviteKey, number);
 }
 
-async function validate(commenter, number, repoOwner, repoName) {
+async function validate(payload, commenter, number, repoOwner, repoName) {
   const issues = await this.util.getAllPages("issues.getAll", {
     filter: "all", labels: this.cfg.activity.issues.inProgress
   });
@@ -131,12 +131,18 @@ async function validate(commenter, number, repoOwner, repoName) {
     });
   }
 
-  claim.apply(this, [commenter, number, repoOwner, repoName]);
+  claim.apply(this, [payload, commenter, number, repoOwner, repoName]);
 }
 
-async function claim(commenter, number, repoOwner, repoName) {
+async function claim(payload, commenter, number, repoOwner, repoName) {
   const response = await this.issues.addAssigneesToIssue({
     owner: repoOwner, repo: repoName, number: number, assignees: [commenter]
+  })
+
+  const removeLabels = payload.issue.labels.map(label => label.name).filter(label => !label.includes('unclaimed'))
+
+  await this.issues.replaceAllLabels({
+    owner: repoOwner, repo: repoName, number: number, labels: removeLabels
   });
 
   if (response.data.assignees.length) return;
