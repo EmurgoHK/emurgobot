@@ -139,10 +139,8 @@ async function claim(payload, commenter, number, repoOwner, repoName) {
     owner: repoOwner, repo: repoName, number: number, assignees: [commenter]
   })
 
-  const removeLabels = payload.issue.labels.map(label => label.name).filter(label => !label.includes('unclaimed'))
-
-  await this.issues.replaceAllLabels({
-    owner: repoOwner, repo: repoName, number: number, labels: removeLabels
+  await this.issues.removeLabel({
+    owner: repoOwner, repo: repoName, number: number, name: 'unclaimed'
   });
 
   if (response.data.assignees.length) return;
