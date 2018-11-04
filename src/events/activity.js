@@ -137,7 +137,11 @@ async function scrapeInactiveIssues(references, issues) {
       owner: repoOwner, repo: repoName, number: number
     });
 
-    if (comments.length) {
+    let allComments = this.util.getAllPages('issues.getComments', {
+      owner: repoOwner, repo: repoName, number: number
+    })
+
+    if (comments.length && (comments[comments.length - 1].id === allComments[allComments.length - 1].id)) { // only remove the assigned user if there were no comments after the inactivity notice
       this.issues.removeAssigneesFromIssue({
         owner: repoOwner, repo: repoName, number: number, assignees: logins
       });
