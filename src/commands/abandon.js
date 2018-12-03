@@ -3,7 +3,7 @@ exports.run = function(payload, commenter) {
   const repoName = payload.repository.name;
   const number = payload.issue.number;
   const assignees = payload.issue.assignees.map(assignee => assignee.login);
-  const isDone = payload.comment.body.includes('done') && !payload.comment.body.includes('abandon')
+  const isDone = payload.comment.body.toLowerCase().includes('done') && !payload.comment.body.toLowerCase().includes('abandon')
 
   if (!assignees.includes(commenter)) {
     const error = "**ERROR:** You have not claimed this issue to work on yet.";
