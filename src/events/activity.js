@@ -137,7 +137,7 @@ async function scrapeInactiveIssues(references, issues) {
       owner: repoOwner, repo: repoName, number: number
     });
 
-    let allComments = this.util.getAllPages('issues.getComments', {
+    let allComments = await this.util.getAllPages('issues.getComments', {
       owner: repoOwner, repo: repoName, number: number
     })
 
